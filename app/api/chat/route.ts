@@ -1,9 +1,27 @@
 import { loadChatMessages, saveChatMessages } from "@/features/ai/actions/chat-store";
+import { chatTools } from "@/features/ai/tools";
 import { getChatModel } from "@/features/ai/utils/model";
 import { requireUser } from "@/features/auth/action/require-user";
 import { prisma } from "@/lib/db";
 import { auth } from "@clerk/nextjs/server";
-import { convertToModelMessages, createIdGenerator, createUIMessageStream, createUIMessageStreamResponse, streamText, toUIMessageStream, type UIMessage } from "ai";
+import { convertToModelMessages, createIdGenerator, createUIMessageStream, createUIMessageStreamResponse, stepCountIs, streamText, toUIMessageStream, type UIMessage } from "ai";
+/**
+ * Builds the system prompt: the conversation's own prompt plus today's date and
+ * instructions telling the model when to reach for the `webSearch` and `weather` tools.
+ */
+function buildSystemPrompt(systemPrompt: string | null) {
+    const base = systemPrompt ?? "You are ChaiGpt, a helpful assistant.";
+
+    return [
+        base,
+        `Today's date is ${new Date().toISOString().slice(0, 10)}.`,
+        "You have tools available. Use them instead of guessing:",
+        "- `webSearch`: call it for anything current, recent, or past your training cutoff — news, prices, sports results, releases, or when the user says 'latest'/'today'/'right now'. Never answer such questions from memory.",
+        "- `weather`: call it for any weather, temperature, or forecast question.",
+        "After a tool returns, answer in your own words and cite source URLs when you used webSearch.",
+    ].join("\n");
+}
+
 /**
  * POST /api/chat — Streams an AI assistant reply for a conversation.
  *
@@ -46,8 +64,10 @@ export async function POST(req: Request) {
 
     const result =  streamText({
         model: getChatModel(conversation.model),
-        system: conversation.systemPrompt ?? "You are ChaiGpt , a helpful assistant",
+        system: buildSystemPrompt(conversation.systemPrompt),
         messages: await convertToModelMessages(messages),
+        tools: chatTools,
+        stopWhen: stepCountIs(5),
     });
 
     result.consumeStream();

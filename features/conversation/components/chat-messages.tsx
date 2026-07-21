@@ -1,6 +1,6 @@
 "use client";
 
-import { isTextUIPart, type UIMessage } from "ai";
+import { isStaticToolUIPart, isTextUIPart, type UIMessage } from "ai";
 import type { ChatStatus } from "ai";
 
 import {
@@ -13,6 +13,13 @@ import {
   MessageContent,
   MessageResponse,
 } from "@/components/ai-elements/message";
+import {
+  Tool,
+  ToolContent,
+  ToolHeader,
+  ToolInput,
+  ToolOutput,
+} from "@/components/ai-elements/tool";
 import { Loader } from "@/components/ai-elements/loader";
 
 /** Extracts plain text from a `UIMessage` by joining all text parts. */
@@ -29,7 +36,8 @@ type ChatMessagesProps = {
 };
 
 /**
- * Renders the conversation message list with markdown responses and a loading indicator.
+ * Renders the conversation message list with markdown responses, tool calls,
+ * and a loading indicator.
  */
 export function ChatMessages({ messages, status }: ChatMessagesProps) {
   const isWaiting =
@@ -38,13 +46,28 @@ export function ChatMessages({ messages, status }: ChatMessagesProps) {
   return (
     <Conversation>
       <ConversationContent className="py-8">
-        {messages.map((message) => (
-          <Message key={message.id} from={message.role}>
-            <MessageContent>
-              <MessageResponse>{getMessageText(message)}</MessageResponse>
-            </MessageContent>
-          </Message>
-        ))}
+        {messages.map((message) => {
+          const toolParts = message.parts.filter(isStaticToolUIPart);
+          const text = getMessageText(message);
+
+          return (
+            <Message key={message.id} from={message.role}>
+              <MessageContent>
+                {toolParts.map((part) => (
+                  <Tool key={part.toolCallId}>
+                    <ToolHeader type={part.type} state={part.state} />
+                    <ToolContent>
+                      <ToolInput input={part.input} />
+                      <ToolOutput output={part.output} errorText={part.errorText} />
+                    </ToolContent>
+                  </Tool>
+                ))}
+
+                {text ? <MessageResponse>{text}</MessageResponse> : null}
+              </MessageContent>
+            </Message>
+          );
+        })}
 
         {isWaiting ? (
           <Message from="assistant">
